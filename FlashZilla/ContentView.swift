@@ -9,11 +9,14 @@ import SwiftUI
 
 struct ContentView: View {
   @Environment(\.accessibilityDifferentiateWithoutColor) var accessibilityDifferentiateWithoutColor
+  @Environment(\.accessibilityVoiceOverEnabled) var accessibilityVoiceOverEnabled
   @Environment(\.scenePhase) var scenePhase
   
-  @State private var cards = Array<Card>(repeating: .example, count: 10)
+  //  @State private var cards = Array<Card>(repeating: .example, count: 10) -> simple example
+  @State private var cards = [Card]()
   @State private var timeRmaining = 100
   @State private var isActive = true
+  @State private var showingEditScreen = false
   
   let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
   
@@ -33,11 +36,21 @@ struct ContentView: View {
               }
             }
             .stacked(at: index, in: cards.count)
+            .allowsHitTesting(index == cards.count - 1)
+            .accessibilityHidden(index < cards.count - 1)
           }
+        }
+        .allowsHitTesting(timeRmaining > 0)
+        
+        if cards.isEmpty {
+          startAgaingButton
         }
       }
       
-      if accessibilityDifferentiateWithoutColor {
+      editButton
+      
+      
+      if accessibilityDifferentiateWithoutColor || accessibilityVoiceOverEnabled {
         withoutColorAlternativeHelper
       }
     }
@@ -50,14 +63,48 @@ struct ContentView: View {
     }
     .onChange(of: scenePhase) {
       if scenePhase == .active {
-        isActive = true
+        if cards.isEmpty == false {
+          isActive = true
+        }
       } else {
         isActive = false
       }
     }
+    .sheet(isPresented: $showingEditScreen, onDismiss: resetCards, content: EditCards.init)
+    .onAppear(perform: resetCards)
   }
   
   // MARK: VIEWS
+  
+  var editButton: some View {
+    VStack {
+      HStack {
+        Spacer()
+        Button {
+          showingEditScreen = true
+        } label: {
+          Image(systemName: "plus.circle")
+            .padding()
+            .background(.black.opacity(0.7))
+            .clipShape(.circle)
+        }
+      }
+      Spacer()
+    }
+    .foregroundStyle(.white)
+    .font(.title3)
+    .padding()
+    
+  }
+  
+  var startAgaingButton: some View {
+    Button("Start again", action: resetCards)
+      .padding()
+      .foregroundStyle(.black)
+      .background(.white)
+      .clipShape(.capsule)
+      .padding()
+  }
   
   var timerView: some View {
     Text("Time: \(timeRmaining)")
@@ -72,19 +119,34 @@ struct ContentView: View {
   var withoutColorAlternativeHelper: some View {
     VStack {
       Spacer()
-      
       HStack {
-        Image(systemName: "xmark.circle")
-          .padding()
-          .background(.black)
-          .clipShape(.circle)
+        Button {
+          withAnimation {
+            removeCard(at: cards.count - 1)
+          }
+        } label: {
+          Image(systemName: "xmark.circle")
+            .padding()
+            .background(.black)
+            .clipShape(.circle)
+        }
+        .accessibilityLabel("Wrong")
+        .accessibilityHint("Mark your answer as being incorrect")
         
         Spacer()
         
-        Image(systemName: "checkmark.circle")
-          .padding()
-          .background(.black)
-          .clipShape(.circle)
+        Button {
+          withAnimation {
+            removeCard(at: cards.count - 1)
+          }
+        } label: {
+          Image(systemName: "checkmark.circle")
+            .padding()
+            .background(.black)
+            .clipShape(.circle)
+        }
+        .accessibilityLabel("Correct")
+        .accessibilityHint("Mark your answer as being correct")
       }
       .foregroundStyle(.white)
       .font(.largeTitle)
@@ -96,7 +158,27 @@ struct ContentView: View {
   // MARK: FUNCTIONS
   
   func removeCard(at index: Int) {
+    guard index >= 0 else { return }
+    
     cards.remove(at: index)
+    
+    if cards.isEmpty {
+      isActive = false
+    }
+  }
+  
+  func resetCards() {
+    timeRmaining = 100
+    isActive = true
+    loadData()
+  }
+  
+  func loadData() {
+    if let data = UserDefaults.standard.data(forKey: "Cards") {
+      if let decoded = try? JSONDecoder().decode([Card].self, from: data) {
+        cards = decoded
+      }
+    }
   }
 }
 
